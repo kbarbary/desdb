@@ -100,6 +100,8 @@ class Connection(cx_Oracle.Connection):
             Return a list of lists instead of a list of dicts.
         strings: bool, optional
             Convert all values to strings
+        array: bool, optional
+            Return a numpy structured array.
         show: bool, optional
             If True, print the query to stderr
         """
@@ -123,7 +125,7 @@ class Connection(cx_Oracle.Connection):
                 raise RuntimeError("Interrupt encountered")
 
         elif array:
-            raise ValueError("Implement array conversion")
+            res = cursor2array(curs)
         else:
             res = cursor2dictlist(curs)
 
@@ -286,6 +288,38 @@ def cursor2dictlist(curs, lower=True):
             for i,val in enumerate(row):
                 tmp[keys[i]] = val    
             output.append(tmp)
+    except KeyboardInterrupt:
+        curs.close()
+        raise RuntimeError("Interrupt encountered")
+
+    return output
+
+def cursor2array(curs, lower=True):
+    import numpy as np
+
+    if curs is None:
+        return None
+
+    keys=[]
+    for d in curs.description:
+        key=d[0]
+        if lower:
+            key=key.lower()
+        keys.append(key)
+
+    try:
+        rows = curs.fetchall()
+        if len(rows) == 0:
+            return None
+        else:
+            cols = [np.array([row[i] for row in rows])
+                    for i in range(len(rows[0]))]
+            dtype = []
+            for key, col in zip(keys, cols):
+                dtype.append((key, col.dtype))
+            output = np.empty(len(cols[0]), dtype=dtype)
+            for key, col in zip(keys, cols):
+                output[key][:] = col
     except KeyboardInterrupt:
         curs.close()
         raise RuntimeError("Interrupt encountered")
